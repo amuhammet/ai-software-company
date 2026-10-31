@@ -1,0 +1,16 @@
+version: '3.9'
+services:
+  app:
+    build: .
+    container_name: ai-software-company-app
+    volumes:
+      - .:/app
+    environment:
+      - PYTHONUNBUFFERED=1
+    command: python -m app.main "Yeni çıkan X kütüphanesini kullanarak bir e-ticaret botu yaz"
+
+  redis:
+    image: redis:7-alpine
+    container_name: ai-software-company-redis
+    ports:
+      - "6379:6379"

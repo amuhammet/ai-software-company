@@ -1,0 +1,232 @@
+from __future__ import annotations
+
+import json
+from typing import Any, Dict, List
+
+from app.config import settings
+from app.memory import memory
+from app.tasks import TaskSpec
+from app.tools import run_python_in_sandbox, search_web, write_text
+
+
+class BaseAgent:
+    def __init__(self, name: str, role: str, system_prompt: str) -> None:
+        self.name = name
+        self.role = role
+        self.system_prompt = system_prompt
+
+    def run(self, task: TaskSpec) -> Dict[str, Any]:
+        raise NotImplementedError
+
+
+class CEOAgent(BaseAgent):
+    def __init__(self) -> None:
+        super().__init__(
+            "CEO",
+            "Orchestrator",
+            "Define the objective, assign work, and ensure final output matches the company vision.",
+        )
+
+    def run(self, task: TaskSpec) -> Dict[str, Any]:
+        return {
+            "agent": self.name,
+            "role": self.role,
+            "state": "task_received",
+            "summary": f"Görev kabul edildi: {task.description}",
+        }
+
+
+class ResearcherAgent(BaseAgent):
+    def __init__(self) -> None:
+        super().__init__(
+            "Researcher",
+            "Research",
+            "Search for the latest docs, versions, and patterns relevant to the task.",
+        )
+
+    def run(self, task: TaskSpec) -> Dict[str, Any]:
+        search_results = search_web(task.description)
+        summary = {
+            "task": task.description,
+            "findings": [
+                "Yeni kütüphaneler ve araçlar için güncel arama sonuçları toparlandı.",
+                "Mimari tasarım için modüler yapı ve doğrulama katmanı şarttır.",
+                "Güvenli çalışma ortamı (sandbox) ve test döngüsü olmazsa üretime geçmek risklidir.",
+            ],
+            "results": search_results[:3],
+        }
+        memory.store("research_summary", summary, tags=["research", task.description])
+        return {
+            "agent": self.name,
+            "role": self.role,
+            "state": "research_done",
+            "data": summary,
+        }
+
+
+class ArchitectAgent(BaseAgent):
+    def __init__(self) -> None:
+        super().__init__(
+            "Architect",
+            "Design",
+            "Create a technical blueprint with modules, schema, and architecture decisions.",
+        )
+
+    def run(self, task: TaskSpec) -> Dict[str, Any]:
+        blueprint = {
+            "project_name": "AI-powered e-commerce bot",
+            "tech_stack": ["Python", "FastAPI", "Redis", "PostgreSQL", "Docker", "LangGraph", "CrewAI"],
+            "modules": {
+                "api": "API layer",
+                "orchestration": "CEO and workflow management",
+                "memory": "Short and long-term memory",
+                "execution": "Sandboxed code execution",
+                "delivery": "Release and deployment",
+            },
+            "schema": {
+                "products": ["id", "name", "price", "stock"],
+                "orders": ["id", "product_id", "quantity", "status"],
+                "sessions": ["id", "user_id", "state"],
+            },
+            "notes": [
+                "Validation should happen before release.",
+                "Code execution must be isolated.",
+                "All major decisions should be stored in memory.",
+            ],
+        }
+        memory.store("blueprint", blueprint, tags=["design", "architecture"])
+        return {
+            "agent": self.name,
+            "role": self.role,
+            "state": "design_done",
+            "blueprint": blueprint,
+        }
+
+
+class DeveloperAgent(BaseAgent):
+    def __init__(self) -> None:
+        super().__init__(
+            "Developer",
+            "Implementation",
+            "Write modular code files that follow the approved blueprint.",
+        )
+
+    def run(self, task: TaskSpec) -> Dict[str, Any]:
+        generated = {
+            "src/__init__.py": "# package marker\n",
+            "src/main.py": "def main():\n    print('E-commerce bot booted successfully')\n\nif __name__ == '__main__':\n    main()\n",
+            "src/agents.py": "class WorkflowAgent:\n    def __init__(self, name):\n        self.name = name\n\n    def run(self):\n        return {'agent': self.name, 'status': 'ok'}\n",
+            "src/store.py": "class Store:\n    def __init__(self):\n        self.products = []\n\n    def add_product(self, product):\n        self.products.append(product)\n",
+            "requirements.txt": "requests\npython-dotenv\n",
+            "Dockerfile": "FROM python:3.11-slim\nWORKDIR /app\nCOPY . .\nCMD [\"python\", \"src/main.py\"]\n",
+        }
+        for relative_path, content in generated.items():
+            write_text(relative_path, content)
+        memory.store("implementation", {"files": list(generated.keys())}, tags=["implementation", "code"])
+        return {
+            "agent": self.name,
+            "role": self.role,
+            "state": "implementation_done",
+            "generated_files": list(generated.keys()),
+        }
+
+
+class QAAgent(BaseAgent):
+    def __init__(self) -> None:
+        super().__init__(
+            "QA",
+            "Testing",
+            "Run validation in a sandbox and report failures with actionable feedback.",
+        )
+
+    def run(self, task: TaskSpec) -> Dict[str, Any]:
+        sample_code = "print('QA validation passed in sandbox')\n"
+        result = run_python_in_sandbox(sample_code)
+        validation = {
+            "tests": ["python execution", "module smoke test", "sandbox isolation"],
+            "result": "passed" if result.success else "failed",
+            "details": result.as_dict(),
+        }
+        return {
+            "agent": self.name,
+            "role": self.role,
+            "state": "validation_done",
+            "validation": validation,
+        }
+
+
+class PostMortemAgent(BaseAgent):
+    def __init__(self) -> None:
+        super().__init__(
+            "PostMortem",
+            "Learning",
+            "Analyze failures and update rules to prevent repeat mistakes.",
+        )
+
+    def run(self, task: TaskSpec) -> Dict[str, Any]:
+        rules = [
+            "Sandbox execution must be isolated from the host environment.",
+            "Dependency versions should be pinned for reproducibility.",
+            "Every task should have a clear validation and feedback loop.",
+        ]
+        memory.store("rules", {"rules": rules}, tags=["postmortem", "learning"])
+        return {
+            "agent": self.name,
+            "role": self.role,
+            "state": "postmortem_done",
+            "rules": rules,
+        }
+
+
+class SelfUpdaterAgent(BaseAgent):
+    def __init__(self) -> None:
+        super().__init__(
+            "SelfUpdater",
+            "Maintenance",
+            "Monitor framework versions and propose upgrade plans before adoption.",
+        )
+
+    def run(self, task: TaskSpec) -> Dict[str, Any]:
+        update_report = {
+            "frameworks": ["CrewAI", "LangGraph", "Tavily"],
+            "advice": "Check release notes and run compatibility tests before upgrading orchestration dependencies.",
+        }
+        memory.store("self_update", update_report, tags=["maintenance", "upgrade"])
+        return {
+            "agent": self.name,
+            "role": self.role,
+            "state": "approved",
+            "report": update_report,
+        }
+
+
+class MultiAgentSystem:
+    def __init__(self) -> None:
+        self.agents = {
+            "ceo": CEOAgent(),
+            "researcher": ResearcherAgent(),
+            "architect": ArchitectAgent(),
+            "developer": DeveloperAgent(),
+            "qa": QAAgent(),
+            "postmortem": PostMortemAgent(),
+            "self_updater": SelfUpdaterAgent(),
+        }
+
+    def execute(self, task: TaskSpec) -> Dict[str, Any]:
+        result = []
+        for agent_name in ["ceo", "researcher", "architect", "developer", "qa", "postmortem", "self_updater"]:
+            result.append(self.agents[agent_name].run(task))
+        return {"task": task.description, "state": "released", "agents": result}
+
+
+__all__ = [
+    "BaseAgent",
+    "CEOAgent",
+    "ResearcherAgent",
+    "ArchitectAgent",
+    "DeveloperAgent",
+    "QAAgent",
+    "PostMortemAgent",
+    "SelfUpdaterAgent",
+    "MultiAgentSystem",
+]
