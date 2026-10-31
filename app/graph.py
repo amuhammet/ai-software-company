@@ -3,19 +3,14 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
-
-@dataclass
-class TaskSpec:
-    description: str
-    constraints: List[str] = field(default_factory=list)
-    metadata: Dict[str, Any] = field(default_factory=dict)
+from app.model_router import ModelRouter
 
 
 @dataclass
 class AgentResult:
     agent: str
     state: str
-    result: Dict[str, Any]
+    result: Dict[str, Any] = field(default_factory=dict)
 
 
 class BaseAgent:
@@ -23,27 +18,28 @@ class BaseAgent:
         self.name = name
         self.role = role
         self.prompt = prompt
+        self.router = ModelRouter()
 
-    def run(self, task: TaskSpec, context: Optional[Dict[str, Any]] = None) -> AgentResult:
+    def run(self, state: Dict[str, Any]) -> AgentResult:
         raise NotImplementedError
 
 
 class CEOAgent(BaseAgent):
     def __init__(self) -> None:
         super().__init__(
-            "CEO",
-            "Orchestrator",
-            "Define goals, assign work, and approve the final output.",
+            name="CEO",
+            role="Orchestrator",
+            prompt="Define objective, assign work, and approve final output.",
         )
 
-    def run(self, task: TaskSpec, context: Optional[Dict[str, Any]] = None) -> AgentResult:
+    def run(self, state: Dict[str, Any]) -> AgentResult:
         return AgentResult(
             agent=self.name,
             state="task_received",
             result={
-                "objective": task.description,
-                "constraints": task.constraints,
+                "objective": state["task"],
                 "status": "accepted",
+                "next_step": "researcher",
             },
         )
 
@@ -51,22 +47,20 @@ class CEOAgent(BaseAgent):
 class ResearcherAgent(BaseAgent):
     def __init__(self) -> None:
         super().__init__(
-            "Researcher",
-            "Research",
-            "Investigate recent docs, trends, and APIs relevant to the task.",
+            name="Researcher",
+            role="Research",
+            prompt="Investigate latest docs, APIs, and trends for the task.",
         )
 
-    def run(self, task: TaskSpec, context: Optional[Dict[str, Any]] = None) -> AgentResult:
-        from app.tools import search_web
-
-        findings = search_web(task.description, max_results=3)
+    def run(self, state: Dict[str, Any]) -> AgentResult:
+        model = self.router.get_model("reasoning")
+        summary = model.invoke(f"Research latest guidance for: {state['task']}")
         return AgentResult(
             agent=self.name,
             state="research_done",
             result={
-                "summary": "Latest references collected and distilled.",
-                "findings": findings,
-                "task": task.description,
+                "research_data": summary,
+                "next_step": "architect",
             },
         )
 
@@ -74,85 +68,73 @@ class ResearcherAgent(BaseAgent):
 class ArchitectAgent(BaseAgent):
     def __init__(self) -> None:
         super().__init__(
-            "Architect",
-            "Design",
-            "Turn findings into a blueprint with modules, schema, and data flow.",
+            name="Architect",
+            role="Design",
+            prompt="Convert research findings into a blueprint with modules and schema.",
         )
 
-    def run(self, task: TaskSpec, context: Optional[Dict[str, Any]] = None) -> AgentResult:
-        blueprint = {
-            "project_name": "AI-powered e-commerce bot",
-            "tech_stack": ["Python", "FastAPI", "Redis", "PostgreSQL", "Docker", "LangGraph", "CrewAI"],
-            "modules": {
-                "api": "Request and response layer",
-                "orchestration": "Task routing and graph control",
-                "memory": "Redis + ChromaDB-backed memory",
-                "sandbox": "Docker execution environment",
-                "release": "GitHub + CI/CD integration",
-            },
-            "schema": {
-                "products": ["id", "name", "price", "stock"],
-                "orders": ["id", "product_id", "quantity", "status"],
-                "sessions": ["id", "user_id", "state"],
-            },
-            "notes": [
-                "Validate in sandbox before release.",
-                "Use memory to reduce repeated mistakes.",
-                "Route failures back to developer with structured feedback.",
-            ],
-        }
+    def run(self, state: Dict[str, Any]) -> AgentResult:
+        model = self.router.get_model("reasoning")
+        blueprint = model.invoke(
+            f"Task: {state['task']}\nResearch: {state.get('research_data', 'N/A')}\nCreate a blueprint with modules, schema, and deployment notes."
+        )
         return AgentResult(
             agent=self.name,
             state="design_done",
-            result={"blueprint": blueprint},
+            result={
+                "blueprint": blueprint,
+                "next_step": "developer",
+            },
         )
 
 
 class DeveloperAgent(BaseAgent):
     def __init__(self) -> None:
         super().__init__(
-            "Developer",
-            "Implementation",
-            "Generate modular code that matches the validated blueprint.",
+            name="Developer",
+            role="Implementation",
+            prompt="Write modular code according to the blueprint and quality requirements.",
         )
 
-    def run(self, task: TaskSpec, context: Optional[Dict[str, Any]] = None) -> AgentResult:
-        generated_files = {
-            "src/__init__.py": "# package marker\n",
-            "src/main.py": "def main():\n    print('E-commerce bot booted successfully')\n\nif __name__ == '__main__':\n    main()\n",
-            "src/agents.py": "class WorkflowAgent:\n    def __init__(self, name):\n        self.name = name\n\n    def run(self):\n        return {'agent': self.name, 'status': 'ok'}\n",
-            "src/store.py": "class Store:\n    def __init__(self):\n        self.products = []\n\n    def add_product(self, product):\n        self.products.append(product)\n",
-            "requirements.txt": "requests\npython-dotenv\n",
-            "Dockerfile": "FROM python:3.11-slim\nWORKDIR /app\nCOPY . .\nCMD [\"python\", \"src/main.py\"]\n",
-        }
+    def run(self, state: Dict[str, Any]) -> AgentResult:
+        model = self.router.get_model("developer")
+        prompt = (
+            f"Task: {state['task']}\n"
+            f"Lessons: {state.get('lessons', 'No prior lessons.')}\n"
+            f"Blueprint: {state.get('blueprint', 'N/A')}\n"
+            "Write production-quality Python code."
+        )
+        code = model.invoke(prompt)
         return AgentResult(
             agent=self.name,
             state="implementation_done",
-            result={"generated_files": generated_files},
+            result={
+                "code_versions": [code],
+                "next_step": "qa",
+            },
         )
 
 
 class QAAgent(BaseAgent):
     def __init__(self) -> None:
         super().__init__(
-            "QA",
-            "Testing",
-            "Execute validation, detect defects, and route the work back if necessary.",
+            name="QA",
+            role="Testing",
+            prompt="Run validation in sandbox, report defects, and decide whether to route back for fix.",
         )
 
-    def run(self, task: TaskSpec, context: Optional[Dict[str, Any]] = None) -> AgentResult:
-        from app.tools import run_python_in_sandbox
-
-        sample_code = "print('QA validation passed in sandbox')\n"
-        validation = run_python_in_sandbox(sample_code, timeout=30)
-        passed = validation.success
+    def run(self, state: Dict[str, Any]) -> AgentResult:
+        model = self.router.get_model("review")
+        code = state.get("code_versions", [""])[-1]
+        feedback = model.invoke(f"Review this code for bugs and correctness:\n{code}")
+        passed = "ERROR" not in feedback.upper() and "FAIL" not in feedback.upper()
         return AgentResult(
             agent=self.name,
             state="validation_done",
             result={
+                "qa_reports": [feedback],
                 "passed": passed,
-                "details": validation.as_dict(),
-                "next_action": "approve" if passed else "fix",
+                "next_step": "ceo" if passed else "developer",
             },
         )
 
@@ -160,48 +142,48 @@ class QAAgent(BaseAgent):
 class PostMortemAgent(BaseAgent):
     def __init__(self) -> None:
         super().__init__(
-            "PostMortem",
-            "Learning",
-            "Analyze failures and convert them into durable learning rules.",
+            name="PostMortem",
+            role="Learning",
+            prompt="Analyze the error and convert it into durable prevention rules.",
         )
 
-    def run(self, task: TaskSpec, context: Optional[Dict[str, Any]] = None) -> AgentResult:
-        rules = [
-            "Execute untrusted code in an isolated Docker environment.",
-            "Pin dependency versions before release.",
-            "Use overlay memory to prevent repeated failures.",
-        ]
+    def run(self, state: Dict[str, Any]) -> AgentResult:
+        model = self.router.get_model("reasoning")
+        errors = state.get("errors", ["No errors recorded."])
+        lesson = model.invoke(f"Based on these errors: {errors}, what prevention rule should we add?")
         return AgentResult(
             agent=self.name,
             state="postmortem_done",
-            result={"rules": rules},
+            result={
+                "lesson": lesson,
+                "rules": [lesson],
+                "next_step": "self_updater",
+            },
         )
 
 
 class SelfUpdaterAgent(BaseAgent):
     def __init__(self) -> None:
         super().__init__(
-            "SelfUpdater",
-            "Maintenance",
-            "Track framework updates and warn when infrastructure upgrade is recommended.",
+            name="SelfUpdater",
+            role="Maintenance",
+            prompt="Check framework updates and propose infrastructure upgrades.",
         )
 
-    def run(self, task: TaskSpec, context: Optional[Dict[str, Any]] = None) -> AgentResult:
-        report = {
-            "frameworks": ["CrewAI", "LangGraph", "Ollama", "Tavily"],
-            "recommendation": "Monitor release notes and run compatibility checks before upgrading orchestration tooling.",
-        }
+    def run(self, state: Dict[str, Any]) -> AgentResult:
         return AgentResult(
             agent=self.name,
             state="upgrade_reviewed",
-            result={report},
+            result={
+                "frameworks": ["LangGraph", "CrewAI", "Ollama", "Tavily"],
+                "recommendation": "Check release notes and validate compatibility before upgrading orchestration pathways.",
+                "next_step": "end",
+            },
         )
 
 
 __all__ = [
     "BaseAgent",
-    "TaskSpec",
-    "AgentResult",
     "CEOAgent",
     "ResearcherAgent",
     "ArchitectAgent",
@@ -209,8 +191,5 @@ __all__ = [
     "QAAgent",
     "PostMortemAgent",
     "SelfUpdaterAgent",
+    "AgentResult",
 ]
-
-
-# Compatibility alias kept for older code paths.
-Task = TaskSpec
