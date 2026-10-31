@@ -1,14 +1,72 @@
-python-dotenv>=1.0.1
-pydantic>=2.8.2
-requests>=2.32.0
-httpx>=0.27.0
-redis>=5.0.0
-chromadb>=0.8.0
-pytest>=8.3.0
-ollama>=0.2.0
-langchain>=0.3.0
-langgraph>=0.2.0
-crewai>=0.70.0
+# AI Software Company
 
-tavily-python>=0.3.0
-duckduckgo-search>=6.2.0
+Bu proje, çoklu ajanlı yazılım şirketi fikrini simüle eden bir Python başlangıç uygulamasıdır. Öncelik, tek büyük modele bağımlı kalmak yerine, her biri spesifik görevlerde uzmanlaşmış ajanların koordinasyonunu sağlamaktır.
+
+Ana hedefler:
+- CEO / Orkestrator
+- Researcher
+- Architect
+- Developer
+- QA Reviewer
+- Post-Mortem Analyzer
+- Self-Updater
+
+Yeni katmanlar:
+- LangGraph-based state machine
+- Conditional edges for validation/rework loop
+- Optional Redis/ChromaDB memory layer
+- Docker sandbox execution
+- Tavily / DuckDuckGo search support
+
+## Hızlı başlatma
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+python -m app.main "Yeni çıkan X kütüphanesini kullanarak bir e-ticaret botu yaz"
+```
+
+## Proje yapısı
+
+```text
+app/
+  __init__.py
+  config.py
+  tasks.py
+  tools.py
+  memory.py
+  agents.py
+  graph.py
+  main.py
+Dockerfile
+docker-compose.yml
+requirements.txt
+.env.example
+README.md
+```
+
+## İş akışı
+
+1. CEO task alır ve hedefi belirler.
+2. Researcher en güncel bilgi ve API belgelerini toplayıp özetler.
+3. Architect mimari blueprint ve veri modeli çıkarır.
+4. Developer modüler kodu üretir.
+5. QA izolasyonlu sandbox içinde doğrulama yapar.
+6. QA başarısızsa akış "fix" döngüsüne döner.
+7. QA başarılıysa post-mortem ve self-updater çalışır.
+8. Sonunda release akışı tamamlanır.
+
+## Notlar
+
+Bu sistem, gerçek üretim ortamı için tam bir otonom yazılım şirketi değildir; geliştirme ve operasyon için güvenli bir üretim öncesi taslak olarak düşünülmelidir. En önemli üretim katmanları şunlardır:
+- LangGraph gerçek graph yapısı
+- Ollama + Llama 3 / CodeLlama
+- Tavily API
+- Redis + ChromaDB
+- Güvenli Docker sandbox
+- GitHub Actions integration
+
+## Lisans
+
+MIT

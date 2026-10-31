@@ -1,73 +1,24 @@
-# AI Software Company
+from __future__ import annotations
 
-Bu proje, çoklu ajanlı yazılım şirketi fikrini simüle eden başlangıç seviyesinde, çalıştırılabilir bir Python scaffold'ıdır.
+import argparse
+import json
 
-Temel bileşenler:
-- CEO / Orkestrator
-- Researcher
-- Architect
-- Developer
-- QA Reviewer
-- Post-Mortem Analyzer
-- Self-Updater
+from app.graph import workflow_graph
 
-Mimari yaklaşım:
-- LangGraph benzeri state machine
-- CrewAI benzeri rol tabanlı ajanlar
-- Docker benzeri sandbox iş akışı
-- Tavily / arama API desteği
-- hafıza katmanı için Redis / ChromaDB uyumlu tasarım
 
-## Hızlı başlatma
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Run the multi-agent software company workflow.")
+    parser.add_argument(
+        "task",
+        nargs="?",
+        default="Yeni çıkan X kütüphanesini kullanarak bir e-ticaret botu yaz",
+        help="Engineering task to route through the multi-agent system.",
+    )
+    args = parser.parse_args()
 
-```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-python -m app.main "Yeni çıkan X kütüphanesini kullanarak bir e-ticaret botu yaz"
-```
+    result = workflow_graph.run(args.task)
+    print(json.dumps(result, ensure_ascii=False, indent=2))
 
-## Proje yapısı
 
-```text
-app/
-  __init__.py
-  agents.py
-  config.py
-  graph.py
-  tasks.py
-  tools.py
-  sandbox.py
-  memory.py
-  main.py
-Dockerfile
-docker-compose.yml
-requirements.txt
-README.md
-.env.example
-```
-
-## Çalışma akışı
-
-1. CEO task alır
-2. Researcher arama yapar ve özet üretir
-3. Architect blueprint oluşturur
-4. Developer dosyaları üretir
-5. QA sandbox içinde çalıştırır
-6. Hata varsa geri bildirim döner
-7. Başarılıysa yayın ve sonrası için post-mortem yapılır
-
-## Notlar
-
-Bu uygulama üretim ortamı için tam bir AI yazılım şirketi değil; ama çoklu ajanlı Mimari, workflow, sandbox ve ajan tasarımı için temel, çalıştırılabilir bir başlangıç noktasıdır.
-
-Gelecekte eklenmesi önerilenler:
-- Ollama + Llama 3 / CodeLlama
-- Tavily veya Serper gerçek arama API
-- Redis ve ChromaDB hafıza katmanı
-- GitHub API ile release flow
-- Docker sandbox güvenlik ve timeout ayarları
-
-## Lisans
-
-MIT
+if __name__ == "__main__":
+    main()
