@@ -1,16 +1,37 @@
 version: '3.9'
+
 services:
   app:
     build: .
     container_name: ai-software-company-app
     volumes:
       - .:/app
+      # KRİTİK: App konteynerının sandbox oluşturabilmesi için ana makinenin Docker socket'ine erişimi gerekir
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Verilerin (SQLite traces, ChromaDB) kalıcı olması için bir volume
+      - ai_data:/app/data
     environment:
       - PYTHONUNBUFFERED=1
+      - OLLAMA_HOST=host.docker.internal # Konteyner içinden ana makinedeki Ollama'ya erişim için
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      # .env dosyasındaki değişkenleri buraya bağlar
+      - TAVILY_API_KEY=${TAVILY_API_KEY}
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+    extra_hosts:
+      - "host.docker.internal:host-gateway" # Linux'ta host.docker.internal'in çalışmasını sağlar
     command: python -m app.main "Yeni çıkan X kütüphanesini kullanarak bir e-ticaret botu yaz"
+    depends_on:
+      - redis
 
   redis:
     image: redis:7-alpine
     container_name: ai-software-company-redis
     ports:
       - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+volumes:
+  ai_data:
+  redis_data:
