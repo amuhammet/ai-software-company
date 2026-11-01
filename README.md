@@ -1,24 +1,33 @@
-from __future__ import annotations
+# 🚀 AI Software Factory
 
-import argparse
-import json
+An autonomous, self-improving AI software company powered by a multi-agent system. This system doesn't just generate code; it architectures, develops, tests, and learns from its own failures using a stateful cyclic workflow.
 
-from app.graph import workflow_graph
+## 🛠 Architecture
+The system operates as a state machine with the following agent roles:
+- **CEO/Orchestrator**: Manages the overall goal and routes tasks.
+- **Researcher**: Gathers technical requirements and API documentation.
+- **Architect**: Designs the system structure and blueprints.
+- **Developer**: Implements the code based on the blueprint.
+- **QA/Reviewer**: Validates code in a hardened sandbox.
+- **PostMortem**: Analyzes failures to generate "Semantic Lessons."
+- **SelfUpdater**: Optimizes agent prompts based on historical data.
 
+## 📦 Key Features
+- **State-Based Workflow**: Uses cyclic routing (Fix Loops) instead of linear sequences.
+- **Hardened Sandbox**: Secure code execution using isolated Docker containers (No network, resource limits).
+- **Hybrid Memory**: Redis for session state and ChromaDB for long-term semantic learning (RAG).
+- **CI/CD Integration**: Automated release pipeline via GitHub Actions.
+- **Local LLM Support**: Integration via Ollama for privacy and cost-efficiency.
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Run the multi-agent software company workflow.")
-    parser.add_argument(
-        "task",
-        nargs="?",
-        default="Yeni çıkan X kütüphanesini kullanarak bir e-ticaret botu yaz",
-        help="Engineering task to route through the multi-agent system.",
-    )
-    args = parser.parse_args()
+## 🚀 Quick Start
 
-    result = workflow_graph.run(args.task)
-    print(json.dumps(result, ensure_ascii=False, indent=2))
+### Prerequisites
+- Python 3.11+
+- Docker (for the secure sandbox)
+- Ollama (for local LLM execution)
 
-
-if __name__ == "__main__":
-    main()
+### Installation
+```bash
+git clone <your-repo-url>
+cd ai-software-factory
+pip install -r requirements.txt
