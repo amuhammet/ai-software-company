@@ -1,198 +1,99 @@
-from __future__ import annotations
+import os
+import uuid
+from typing import Dict, Any
+from dotenv import load_dotenv
 
-from typing import Any, Dict, List, TypedDict
+from app.graph_workflow import app_graph, AgentState
+from app.memory_manager import MemoryManager
 
-try:
-    from langgraph.graph import END, StateGraph
-except Exception:  # pragma: no cover
-    END = "END"
+load_dotenv()
 
-    class StateGraph:  # type: ignore
-        def __init__(self, state_type: Any) -> None:
-            self.state_type = state_type
-            self.nodes: Dict[str, Any] = {}
-            self.conditional_edges: List[tuple[str, Any, Dict[str, str]]] = []
-            self.entry = None
+class AISoftwareCompany:
+    def __init__(self):
+        print("🚀 Initializing AI Software Company Foundation...")
+        self.memory = MemoryManager()
+        self.workflow = app_graph
 
-        def add_node(self, name: str, func: Any) -> "StateGraph":
-            self.nodes[name] = func
-            return self
+    def run_project(self, task_goal: str):
+        """
+        Executes the full lifecycle of a software project.
+        """
+        # 1. Initialize Session
+        session_id = str(uuid.uuid4())
+        print(f"📁 Starting project session: {session_id}")
 
-        def set_entry_point(self, name: str) -> "StateGraph":
-            self.entry = name
-            return self
+        # 2. Consult Long-Term Memory (RAG)
+        # Before the graph starts, we check if the company has lessons for this task
+        print("🧠 Consulting Company Playbook for historical lessons...")
+        past_lessons = self.memory.query_lessons(task_goal)
+        
+        lesson_context = "No previous lessons found."
+        if past_lessons:
+            lesson_context = "\n".join([f"- {l}" for l in past_lessons])
+            print(f"💡 Found {len(past_lessons)} relevant lessons to guide the agents.")
 
-        def add_edge(self, source: str, target: str) -> "StateGraph":
-            return self
-
-        def add_conditional_edges(self, source: str, fn: Any, mapping: Dict[str, str]) -> "StateGraph":
-            self.conditional_edges.append((source, fn, mapping))
-            return self
-
-        def compile(self) -> "StateGraph":
-            return self
-
-        def invoke(self, state: Dict[str, Any]) -> Dict[str, Any]:
-            current = self.entry
-            while current is not None and current != END:
-                state = self.nodes[current](state)
-                if current == "qa":
-                    decision = self.conditional_edges[0][1](state)
-                    current = self.conditional_edges[0][2].get(decision, END)
-                    continue
-                if "next_step" in state:
-                    current = state["next_step"]
-                    if current == "end":
-                        break
-                else:
-                    break
-            return state
-
-from app.agents import (
-    ArchitectAgent,
-    CEOAgent,
-    DeveloperAgent,
-    PostMortemAgent,
-    QAAgent,
-    ResearcherAgent,
-    SelfUpdaterAgent,
-)
-from app.memory import memory
-from app.model_router import ModelRouter
-
-
-class SoftwareState(TypedDict):
-    task: str
-    research_data: str
-    blueprint: str
-    code_versions: List[str]
-    errors: List[str]
-    lessons: str
-    status: str
-    iterations: int
-    next_step: str
-
-
-class WorkflowGraph:
-    def __init__(self) -> None:
-        self.ceo = CEOAgent()
-        self.researcher = ResearcherAgent()
-        self.architect = ArchitectAgent()
-        self.developer = DeveloperAgent()
-        self.qa = QAAgent()
-        self.postmortem = PostMortemAgent()
-        self.self_updater = SelfUpdaterAgent()
-        self.router = ModelRouter()
-        self.memory = memory
-        self.graph = self._build_graph()
-
-    def _build_graph(self) -> Any:
-        graph = StateGraph(SoftwareState)
-
-        def ceo_node(state: Dict[str, Any]) -> Dict[str, Any]:
-            result = self.ceo.run(state)
-            state["status"] = result.state
-            state["next_step"] = result.result.get("next_step", "researcher")
-            return state
-
-        def researcher_node(state: Dict[str, Any]) -> Dict[str, Any]:
-            result = self.researcher.run(state)
-            state["research_data"] = result.result.get("research_data", "")
-            state["status"] = result.state
-            state["next_step"] = result.result.get("next_step", "architect")
-            return state
-
-        def architect_node(state: Dict[str, Any]) -> Dict[str, Any]:
-            result = self.architect.run(state)
-            state["blueprint"] = result.result.get("blueprint", "")
-            state["status"] = result.state
-            state["next_step"] = result.result.get("next_step", "developer")
-            return state
-
-        def developer_node(state: Dict[str, Any]) -> Dict[str, Any]:
-            state["lessons"] = self.memory.retrieve_lessons(state["task"], n_results=3)
-            result = self.developer.run(state)
-            state["code_versions"] = result.result.get("code_versions", [])
-            state["status"] = result.state
-            state["next_step"] = result.result.get("next_step", "qa")
-            return state
-
-        def qa_node(state: Dict[str, Any]) -> Dict[str, Any]:
-            result = self.qa.run(state)
-            state["errors"] = [item for item in result.result.get("qa_reports", []) if "FAIL" in item.upper() or "ERROR" in item.upper()]
-            state["status"] = result.state
-            state["next_step"] = result.result.get("next_step", "ceo")
-            return state
-
-        def postmortem_node(state: Dict[str, Any]) -> Dict[str, Any]:
-            result = self.postmortem.run(state)
-            if "lesson" in result.result:
-                self.memory.save_lesson("project_default", str(result.result["lesson"]))
-            state["status"] = result.state
-            state["lessons"] = str(result.result.get("rules", []))
-            state["next_step"] = result.result.get("next_step", "self_updater")
-            return state
-
-        def self_updater_node(state: Dict[str, Any]) -> Dict[str, Any]:
-            result = self.self_updater.run(state)
-            state["status"] = result.state
-            state["next_step"] = result.result.get("next_step", "end")
-            return state
-
-        graph.add_node("ceo", ceo_node)
-        graph.add_node("researcher", researcher_node)
-        graph.add_node("architect", architect_node)
-        graph.add_node("developer", developer_node)
-        graph.add_node("qa", qa_node)
-        graph.add_node("postmortem", postmortem_node)
-        graph.add_node("self_updater", self_updater_node)
-
-        graph.set_entry_point("ceo")
-        graph.add_edge("ceo", "researcher")
-        graph.add_edge("researcher", "architect")
-        graph.add_edge("architect", "developer")
-        graph.add_edge("developer", "qa")
-
-        def route_after_qa(state: Dict[str, Any]) -> str:
-            if state.get("errors"):
-                return "developer"
-            return "postmortem"
-
-        graph.add_conditional_edges(
-            "qa",
-            route_after_qa,
-            {"developer": "developer", "postmortem": "postmortem"},
-        )
-        graph.add_edge("postmortem", "self_updater")
-        graph.add_edge("self_updater", END)
-
-        return graph.compile()
-
-    def run(self, task_description: str) -> Dict[str, Any]:
-        init_state: Dict[str, Any] = {
-            "task": task_description,
-            "research_data": "",
-            "blueprint": "",
-            "code_versions": [],
-            "errors": [],
-            "lessons": "",
-            "status": "task_received",
+        # 3. Prepare Initial State
+        initial_state: AgentState = {
+            "task": f"{task_goal}\n\nHistorical Lessons: {lesson_context}",
+            "research": "",
+            "architecture": "",
+            "code": "",
+            "qa_feedback": "",
+            "status": "planning",
             "iterations": 0,
-            "next_step": "ceo",
-        }
-        result = self.graph.invoke(init_state)
-        return {
-            "task": result.get("task", task_description),
-            "status": result.get("status", "completed"),
-            "research_data": result.get("research_data", ""),
-            "blueprint": result.get("blueprint", ""),
-            "code_versions": result.get("code_versions", []),
-            "errors": result.get("errors", []),
-            "lessons": result.get("lessons", ""),
-            "next_step": result.get("next_step", END),
+            "history": [f"Project started: {task_goal}"]
         }
 
+        # 4. Execute the Graph Workflow
+        print("⚙️  Executing multi-agent workflow...")
+        try:
+            # we stream the output to see the agents working in real-time
+            final_state = None
+            for output in self.workflow.stream(initial_state):
+                for node_name, state_update in output.items():
+                    print(f"  [Node: {node_name}] -> {state_update.get('history', [''])[-1]}")
+                    # Persist state to Redis for session recovery
+                    self.memory.save_session(session_id, state_update)
+                    # Log event to Redis history
+                    self.memory.add_to_history(session_id, f"Node {node_name} executed")
+                final_state = output # Capture the last emitted state
 
-workflow_graph = WorkflowGraph()
+            # 5. Post-Project Distillation (PostMortem)
+            if final_state:
+                self._perform_post_mortem(session_id, final_state)
 
-__all__ = ["WorkflowGraph", "workflow_graph", "SoftwareState"]
+            print("\n✅ Project Lifecycle Complete.")
+            return final_state
+
+        except Exception as e:
+            print(f"❌ Critical System Failure: {e}")
+            return None
+
+    def _perform_post_mortem(self, session_id: str, final_state: Dict[str, Any]):
+        """
+        Analyzes the run and saves a distilled lesson to ChromaDB.
+        """
+        print("📝 Performing PostMortem analysis...")
+        
+        # We extract the final state values to build the lesson
+        task = final_state.get("task", "Unknown Task")
+        feedback = final_state.get("qa_feedback", "No feedback")
+        iterations = final_state.get("iterations", 0)
+        
+        # In a full implementation, the PostMortem agent (from agents.py) 
+        # would process this via an LLM. Here we simulate the distillation:
+        if iterations > 1:
+            lesson = f"Task '{task}' required {iterations} iterations. Key friction point: {feedback[:100]}..."
+            self.memory.store_lesson(
+                lesson=lesson,
+                task_context=task,
+                metadata={"iterations": iterations, "session_id": session_id}
+            )
+            print("💾 Lesson stored in Company Playbook.")
+
+if __name__ == "__main__":
+    company = AISoftwareCompany()
+    
+    # Example Task: Build a simple secure password validator
+    goal = "Create a Python script that validates passwords for 12+ chars, 1 digit, and 1 special char. It must be production-ready."
+    company.run_project(goal)
