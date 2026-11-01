@@ -1,0 +1,48 @@
+name: AI Software Factory Release
+
+on:
+  push:
+    paths:
+      - 'releases/**' # Trigger only when files are moved to the releases folder
+    tags:
+      - 'v*' # Trigger on version tags
+
+concurrency:
+  group: release-pipeline
+  cancel-in-progress: false # Ensure releases happen sequentially
+
+permissions:
+  contents: write # Required to create releases and tags
+
+jobs:
+  validate-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run Sandbox Smoke Tests
+        run: |
+          # This ensures the codebase can actually run in the sandbox 
+          # before the GitHub release is finalized.
+          pytest tests/test_smoke.py
+
+      - name: Finalize Release
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Call the release manager to attach metadata and artifacts
+          python -c "from app.release import ReleaseManager; \
+          rm = ReleaseManager(); \
+          print(rm.create_production_release('${{ github.ref_name }}', 'Automated AI Factory Release', ['requirements.txt']))"
