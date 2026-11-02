@@ -1,33 +1,59 @@
-import os
-from typing import List, Dict, Any
-from ollama import Client
-from dotenv import load_dotenv
+import logging
+from typing import Any, Dict
 
-load_dotenv()
+from app.gateway.client import GatewayClient
 
-class LocalLLM:
-    """Wrapper for Ollama to handle agent-specific prompting."""
-    def __init__(self, model: str = "llama3"):
-        self.client = Client(host=os.getenv("OLLAMA_BASE_URL", "http://host.docker.internal:11434"))
+logger = logging.getLogger("AIPlatformAgents")
+gateway_client = GatewayClient()
+
+
+class BaseAgentNode:
+    def __init__(self, name: str, role_prompt: str, model: str = "ollama/llama3"):
+        self.name = name
+        self.role_prompt = role_prompt
         self.model = model
 
-    def chat(self, system_prompt: str, user_prompt: str) -> str:
-        response = self.client.chat(
-            model=self.model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ]
-        )
-        return response['message']['content']
+    def execute(self, state: Dict[str, Any]) -> Dict[str, Any]:
+        logger.info(f"[{self.name}] Executing task via Gateway (Model: {self.model})...")
 
-# Agent Persona Definitions
-AGENT_ROLES = {
-    "CEO": "You are the CEO/Orchestrator. Your goal is to ensure the final product meets the user's goal. You make the final decision on whether to release or send for further iteration.",
-    "Researcher": "You are a Technical Researcher. Use the Tavily API to find the best libraries, patterns, and documentation to solve the problem.",
-    "Architect": "You are a Software Architect. Turn research into a detailed technical specification and file structure. Focus on modularity and security.",
-    "Developer": "You are a Senior Python Developer. Write production-ready, clean, and documented code based on the architecture. Only output the code itself.",
-    "QA": "You are a QA Engineer. Your job is to find bugs, security holes, and edge cases. You must test the code in the sandbox and provide specific feedback for fixes.",
-    "PostMortem": "You are a Systems Analyst. Analyze why a failure occurred and distill a 'lesson learned' for the company memory.",
-    "SelfUpdater": "You are the System Engineer. Your goal is to improve the internal prompts and workflows based on PostMortem lessons."
-}
+        user_prompt = state.get("current_task", "Analyze the repository and provide recommendations.")
+
+        messages = [
+            {"role": "system", "content": self.role_prompt},
+            {"role": "user", "content": user_prompt},
+        ]
+
+        try:
+            result = gateway_client.chat_completion(
+                messages=messages,
+                model=self.model,
+                temperature=0.2,
+            )
+
+            output_content = result.get("content", "")
+            logger.info(f"[{self.name}] Completed successfully. Cost: ${result.get('cost_usd', 0.0):.4f}")
+
+            state[f"{self.name.lower()}_output"] = output_content
+            state["history"] = state.get("history", []) + [{self.name: output_content}]
+
+        except Exception as exc:
+            logger.error(f"[{self.name}] Execution failed: {str(exc)}")
+            state["error"] = str(exc)
+
+        return state
+
+
+ArchitectAgent = BaseAgentNode(
+    name="Architect",
+    role_prompt="You are a Principal Software Architect. Design clean, scalable folder structures and workflows.",
+    model="ollama/llama3",
+)
+
+DeveloperAgent = BaseAgentNode(
+    name="Developer",
+    role_prompt="You are a Senior Python Developer. Implement robust code based on architectural designs.",
+    model="ollama/llama3",
+)
+
+
+__all__ = ["BaseAgentNode", "ArchitectAgent", "DeveloperAgent"]

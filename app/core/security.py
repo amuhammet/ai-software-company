@@ -1,53 +1,26 @@
-import hashlib
-import os
-import time
-from typing import Any, Dict, Optional
-
-try:
-    import jwt
-except ImportError:  # pragma: no cover
-    jwt = None
-
-from app.core.config import settings
+from fastapi import Header, HTTPException, status
 
 
-def hash_password(password: str) -> str:
-    return hashlib.sha256(password.encode("utf-8")).hexdigest()
+def get_current_tenant(
+    x_tenant_id: str = Header(default="org_default", description="Tenant organization ID"),
+    authorization: str | None = Header(default=None, description="Bearer token optional stub"),
+) -> str:
+    """
+    Validates and extracts the tenant ID from request headers.
+    Supports X-Tenant-ID header for transition/demo mode, with hooks for future JWT validation.
+    """
+    if not x_tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Missing tenant identification header (X-Tenant-ID)",
+        )
+
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization.split(" ", 1)[1]
+        # Future JWT parsing logic can be injected here.
+        _ = token
+
+    return x_tenant_id
 
 
-def verify_password(password: str, hashed_password: str) -> bool:
-    return hash_password(password) == hashed_password
-
-
-def create_access_token(subject: str, extra_claims: Optional[Dict[str, Any]] = None) -> str:
-    if jwt is None:
-        raise RuntimeError("PyJWT is required for token generation. Install it in requirements.txt.")
-
-    payload = {
-        "sub": subject,
-        "iat": int(time.time()),
-        "exp": int(time.time()) + 3600,
-    }
-    if extra_claims:
-        payload.update(extra_claims)
-    return jwt.encode(payload, settings.secret_key, algorithm="HS256")
-
-
-def decode_access_token(token: str) -> Dict[str, Any]:
-    if jwt is None:
-        raise RuntimeError("PyJWT is required for token decoding. Install it in requirements.txt.")
-    return jwt.decode(token, settings.secret_key, algorithms=["HS256"])
-
-
-def get_current_active_user() -> Dict[str, Any]:
-    """Placeholder dependency to be wired into FastAPI auth later."""
-    return {"user_id": "demo-user", "role": "admin"}
-
-
-__all__ = [
-    "hash_password",
-    "verify_password",
-    "create_access_token",
-    "decode_access_token",
-    "get_current_active_user",
-]
+__all__ = ["get_current_tenant"]
