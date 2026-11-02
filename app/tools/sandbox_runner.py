@@ -1,48 +1,73 @@
 from __future__ import annotations
 
-from typing import Any, Dict
+from dataclasses import dataclass
+from typing import Any, Dict, Optional
 
-try:
-    import docker
-except ImportError:  # pragma: no cover
-    docker = None
+
+@dataclass
+class SandboxResult:
+    exit_code: int
+    stdout: str = ""
+    stderr: str = ""
+    success: bool = False
+
+    @property
+    def output(self) -> str:
+        return (self.stdout or "") + (self.stderr or "")
 
 
 class SandboxExecutionRunner:
-    """Executes scripts in an isolated Docker sandbox."""
+    """Executes generated scripts in an isolated Docker sandbox."""
 
     def __init__(self, image_name: str = "python:3.11-slim") -> None:
         self.image_name = image_name
-        self.client = docker.from_env() if docker is not None else None
+        try:
+            import docker
+        except ImportError:  # pragma: no cover
+            docker = None
+        self._docker = docker
+        self._client = docker.from_env() if docker is not None else None
 
-    def execute_code(self, script_content: str, timeout_sec: int = 30) -> Dict[str, Any]:
-        if self.client is None:
-            return {"exit_code": -1, "output": "Docker SDK not installed; sandbox unavailable."}
+    def execute_code(self, script_content: str, timeout_sec: int = 30) -> SandboxResult:
+        if self._client is None:
+            return SandboxResult(exit_code=-1, stderr="Docker SDK not available; sandbox unavailable.")
 
         container = None
         try:
-            container = self.client.containers.create(
+            container = self._client.containers.run(
                 image=self.image_name,
-                command=f"python -c \"{script_content}\"",
+                command=["python", "-c", script_content],
                 network_disabled=True,
                 mem_limit="512m",
-                cpu_quota=50000,
+                auto_remove=True,
+                detach=False,
+                stdout=True,
+                stderr=True,
+                timeout=timeout_sec,
             )
-            container.start()
-            result = container.wait(timeout=timeout_sec)
-            logs = container.logs(stdout=True, stderr=True).decode("utf-8")
-            return {
-                "exit_code": result.get("StatusCode", -1),
-                "output": logs,
-            }
+            if isinstance(container, bytes):
+                stdout = container.decode("utf-8", errors="replace")
+                return SandboxResult(exit_code=0, stdout=stdout, success=True)
+
+            # Docker SDK returns bytes or a tuple depending on API behavior.
+            if isinstance(container, tuple):
+                stdout, stderr = container
+                return SandboxResult(
+                    exit_code=0,
+                    stdout=stdout.decode("utf-8", errors="replace") if isinstance(stdout, bytes) else str(stdout),
+                    stderr=stderr.decode("utf-8", errors="replace") if isinstance(stderr, bytes) else str(stderr),
+                    success=True,
+                )
+
+            return SandboxResult(exit_code=0, stdout=str(container), success=True)
         except Exception as exc:  # pragma: no cover
-            return {"exit_code": -1, "output": f"Sandbox execution error: {exc}"}
+            return SandboxResult(exit_code=-1, stderr=f"Sandbox execution error: {exc}")
         finally:
-            if container is not None:
+            if container is not None and hasattr(container, "remove"):
                 try:
                     container.remove(force=True)
-                except Exception:  # pragma: no cover
+                except Exception:
                     pass
 
 
-__all__ = ["SandboxExecutionRunner"]
+__all__ = ["SandboxExecutionRunner", "SandboxResult"]
