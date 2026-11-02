@@ -1,6 +1,6 @@
 """API package exports."""
 
-from app.api.v1_auth import router as auth_router
-from app.api.v1_chat import router as chat_router
+from app.api.v2_agents import router as agents_router
+from app.api.v2_tools import router as tools_router
 
-__all__ = ["auth_router", "chat_router"]
+__all__ = ["agents_router", "tools_router"]
