@@ -10,7 +10,6 @@ class BaseTool(ABC):
 
     @abstractmethod
     def run(self, arguments: Dict[str, Any]) -> str:
-        """Return a serialized result or plain text output."""
         raise NotImplementedError
 
 
