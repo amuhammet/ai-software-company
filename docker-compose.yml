@@ -1,37 +1,76 @@
 version: '3.9'
 
 services:
-  app:
-    build: .
-    container_name: ai-software-company-app
-    volumes:
-      - .:/app
-      # KRİTİK: App konteynerının sandbox oluşturabilmesi için ana makinenin Docker socket'ine erişimi gerekir
-      - /var/run/docker.sock:/var/run/docker.sock
-      # Verilerin (SQLite traces, ChromaDB) kalıcı olması için bir volume
-      - ai_data:/app/data
+  postgres:
+    image: postgres:15-alpine
+    container_name: ai_platform_postgres
+    restart: unless-stopped
     environment:
-      - PYTHONUNBUFFERED=1
-      - OLLAMA_HOST=host.docker.internal # Konteyner içinden ana makinedeki Ollama'ya erişim için
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      # .env dosyasındaki değişkenleri buraya bağlar
-      - TAVILY_API_KEY=${TAVILY_API_KEY}
-      - GITHUB_TOKEN=${GITHUB_TOKEN}
-    extra_hosts:
-      - "host.docker.internal:host-gateway" # Linux'ta host.docker.internal'in çalışmasını sağlar
-    command: python -m app.main "Yeni çıkan X kütüphanesini kullanarak bir e-ticaret botu yaz"
-    depends_on:
-      - redis
+      POSTGRES_USER: ${POSTGRES_USER:-platform_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-platform_secret}
+      POSTGRES_DB: ${POSTGRES_DB:-ai_platform_db}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-platform_user} -d ${POSTGRES_DB:-ai_platform_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   redis:
     image: redis:7-alpine
-    container_name: ai-software-company-redis
+    container_name: ai_platform_redis
+    restart: unless-stopped
     ports:
       - "6379:6379"
     volumes:
       - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ai_platform_ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+
+  platform_api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ai_platform_api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    environment:
+      - DATABASE_URL=postgresql+psycopg2://${POSTGRES_USER:-platform_user}:${POSTGRES_PASSWORD:-platform_secret}@postgres:5432/${POSTGRES_DB:-ai_platform_db}
+      - REDIS_URL=redis://redis:6379/0
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - APP_SECRET_KEY=${APP_SECRET_KEY:-super-secret-key-change-me}
+      - JWT_SECRET=${JWT_SECRET:-super-secret-key-change-me}
+      - DEFAULT_MODEL=${DEFAULT_MODEL:-ollama/llama3}
+      - DEFAULT_ORG_BUDGET_USD=${DEFAULT_ORG_BUDGET_USD:-500}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      ollama:
+        condition: service_started
 
 volumes:
-  ai_data:
+  postgres_data:
   redis_data:
+  ollama_data:

@@ -1,49 +1,16 @@
-# AI Software Company
+# AI Software Company Platform
+# Core runtime dependencies for the initial multi-tenant gateway MVP.
 
-Bu proje, çoklu ajanlı yazılım şirketi fikrini simüle eden, üretim odaklı bir Python starter uygulamasıdır.
-
-Temel özellikler:
-- CEO / Orkestrator
-- Researcher
-- Architect
-- Developer
-- QA Reviewer
-- Post-Mortem Analyzer
-- Self-Updater
-
-Yeni üretim katmanları:
-- LangGraph state machine with conditional routing
-- Model router (reasoning, coding, review)
-- Hybrid memory layer (local memory + Redis/ChromaDB hooks)
-- Safe sandbox execution flow
-- Learning loop from QA to PostMortem to future prevention
-
-## Hızlı başlatma
-
-```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-python -m app.main "Yeni çıkan X kütüphanesini kullanarak bir e-ticaret botu yaz"
-```
-
-## Mimari özet
-
-```text
-ceo -> researcher -> architect -> developer -> qa -> (developer if errors) / (postmortem if pass) -> self_updater -> end
-```
-
-## Notlar
-
-Bu sistem, gerçek üretim ortamı için tam bir AI yazılım fabrikası değildir; ancak “öğrenen”, “durumlu”, “koşullu geçişli” ve “güvenli çalışma ortamı” anlayışına yaklaşan güçlü bir örnek yapıdır.
-
-Sonraki adımda önerilenler:
-- Real Ollama model connectors
-- Tavily API search integration
-- Redis + ChromaDB production memory wiring
-- Hardened Docker sandbox with network isolation and timeout limits
-- GitHub Actions release pipeline
-
-## Lisans
-
-MIT
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+sqlalchemy==2.0.35
+psycopg2-binary==2.9.9
+python-dotenv==1.0.1
+redis==5.2.0
+ollama==0.3.3
+litellm>=1.50.0
+PyJWT==2.10.1
+pydantic[email]==2.9.2
+python-multipart==0.0.9
+docker==7.1.0
+requests==2.32.3
