@@ -1,6 +1,10 @@
 import os
 from dataclasses import dataclass
-from typing import Dict, List, Optional
+from typing import List, Optional
+
+from dotenv import load_dotenv
+
+load_dotenv()
 
 
 @dataclass
@@ -19,7 +23,7 @@ class AppSettings:
     azure_openai_endpoint: Optional[str] = os.getenv("AZURE_OPENAI_ENDPOINT")
     default_model: str = os.getenv("DEFAULT_MODEL", "ollama/llama3")
     budget_default_usd: float = float(os.getenv("DEFAULT_ORG_BUDGET_USD", "100.0"))
-    allowed_providers: List[str] = None
+    allowed_providers: Optional[List[str]] = None
 
     def __post_init__(self) -> None:
         if self.allowed_providers is None:
