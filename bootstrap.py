@@ -1,14 +1,9 @@
 #!/usr/bin/env python3
-"""Sprint 1 bootstrap script for the AI software company platform.
-
-This script ensures the platform database exists, creates the default tenant and
-admin user, and verifies that the required services are reachable.
-"""
+"""Bootstrap database schema and seed the default tenant, admin, and agents."""
 
 from __future__ import annotations
 
 import os
-import sys
 import urllib.request
 from datetime import datetime
 
@@ -18,16 +13,62 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.database import Base, SessionLocal
 from app.core.security import hash_password
+from app.models.agent import AgentRecord  # noqa: F401 - registers model metadata
 from app.models.tenant import Organization, User
+
+DEFAULT_AGENTS = (
+    {
+        "id": "agent_default_developer",
+        "name": "Default Developer",
+        "purpose": "Implement and improve software features from technical requirements.",
+        "model_preference": "ollama/llama3",
+        "system_prompt": "You are a careful senior software developer. Produce secure, maintainable code and explain important decisions.",
+        "allowed_tools": ["code_sandbox", "test_runner"],
+        "trust_score": 90.0,
+        "metadata_tags": {"capabilities": ["development", "coding", "implementation"]},
+    },
+    {
+        "id": "agent_default_qa",
+        "name": "Default QA",
+        "purpose": "Review software changes and design or run focused tests.",
+        "model_preference": "ollama/llama3",
+        "system_prompt": "You are a meticulous QA engineer. Identify regressions, edge cases, and missing tests. Never claim tests were run unless they actually were.",
+        "allowed_tools": ["test_runner"],
+        "trust_score": 90.0,
+        "metadata_tags": {"capabilities": ["qa", "testing", "review"]},
+    },
+)
 
 
 def verify_ollama() -> None:
-    url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+    url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/")
     try:
         with urllib.request.urlopen(f"{url}/api/tags", timeout=5) as response:
             print(f"[OK] Ollama reachable at {url} (status={response.status})")
     except Exception as exc:  # pragma: no cover
         print(f"[WARN] Could not reach Ollama at {url}: {exc}")
+
+
+def seed_default_agents(db: Session, owner_id: str) -> None:
+    """Create missing built-in agents without overwriting user-edited records."""
+    created = 0
+    for agent_data in DEFAULT_AGENTS:
+        existing = db.get(AgentRecord, agent_data["id"])
+        if existing is not None:
+            continue
+        db.add(
+            AgentRecord(
+                **agent_data,
+                owner_id=owner_id,
+                is_public=True,
+                created_at=datetime.utcnow(),
+                updated_at=datetime.utcnow(),
+            )
+        )
+        created += 1
+
+    db.commit()
+    print(f"[OK] Default agents present ({created} created)")
 
 
 def bootstrap_database() -> None:
@@ -66,9 +107,11 @@ def bootstrap_database() -> None:
             db.commit()
             print("[OK] Created default admin user: admin@platform.local")
 
+        seed_default_agents(db, owner_id=org.id)
         print(f"[OK] Organization budget: ${org.monthly_budget_usd:.2f}")
     finally:
         db.close()
+        engine.dispose()
 
 
 def main() -> None:
