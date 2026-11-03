@@ -64,6 +64,10 @@ class AgentRepository:
 
         return self._using_session(operation)
 
+    def save(self, card: AgentCard) -> AgentCard:
+        """Compatibility alias for callers using the more generic save() name."""
+        return self.create(card)
+
     def get(self, agent_id: str) -> Optional[AgentCard]:
         def operation(db: Session) -> Optional[AgentCard]:
             record = db.get(AgentRecord, agent_id)
