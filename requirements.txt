@@ -14,3 +14,7 @@ pydantic[email]==2.9.2
 python-multipart==0.0.9
 docker==7.1.0
 requests==2.32.3
+langgraph>=0.2.0
+PyGithub>=2.0.0
+pytest>=8.0.0
+chromadb>=0.5.0
