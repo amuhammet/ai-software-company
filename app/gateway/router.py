@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional
 
 from app.core.config import settings
+from app.gateway.provider_adapter import LLMProviderAdapter
 
 
 class LLMGatewayRouter:
@@ -15,7 +16,7 @@ class LLMGatewayRouter:
     }
 
     def __init__(self, provider_adapter: Optional[Any] = None) -> None:
-        self.provider_adapter = provider_adapter
+        self.provider_adapter = provider_adapter or LLMProviderAdapter()
 
     def route_model(self, task_type: str, preferred_model: Optional[str] = None) -> str:
         if preferred_model:
@@ -34,9 +35,6 @@ class LLMGatewayRouter:
         temperature: float = 0.7,
         max_tokens: Optional[int] = None,
     ) -> Dict[str, Any]:
-        if self.provider_adapter is None:
-            raise RuntimeError("No provider adapter configured for the gateway router.")
-
         model = self.route_model(task_type, preferred_model)
         return self.provider_adapter.completion(
             model=model,
